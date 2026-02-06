@@ -25,9 +25,12 @@ const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 const menuToggle = document.getElementById("menu-toggle");
 const navbar = document.getElementById("navbar");
+const tabSend = document.getElementById("tabSend");
+const tabReceive = document.getElementById("tabReceive");
 const btnCreate = document.getElementById("btnCreate");
-const btnShowJoin = document.getElementById("btnShowJoin");
 const btnJoin = document.getElementById("unirseBtn");
+const sendControls = document.getElementById("send-controls");
+const recepcionDiv = document.getElementById("recepcion");
 const helpBtn = document.getElementById("help-btn");
 const returnBtn = document.getElementById("return-btn");
 const infoModal = document.getElementById("info-modal");
@@ -309,8 +312,31 @@ if (menuToggle && navbar) {
 }
 
 if (btnCreate) btnCreate.addEventListener("click", crearSala);
-if (btnShowJoin) btnShowJoin.addEventListener("click", mostrarRecepcion);
 if (btnJoin) btnJoin.addEventListener("click", unirseSala);
+
+if (tabSend) {
+    tabSend.addEventListener("click", () => {
+        tabSend.classList.add('active-tab');
+        tabSend.classList.remove('inactive-tab');
+        tabReceive.classList.remove('active-tab');
+        tabReceive.classList.add('inactive-tab');
+
+        if (sendControls) sendControls.classList.remove('hidden');
+        if (recepcionDiv) recepcionDiv.classList.add('hidden');
+    });
+}
+
+if (tabReceive) {
+    tabReceive.addEventListener("click", () => {
+        tabReceive.classList.add('active-tab');
+        tabReceive.classList.remove('inactive-tab');
+        tabSend.classList.remove('active-tab');
+        tabSend.classList.add('inactive-tab');
+
+        if (recepcionDiv) recepcionDiv.classList.remove('hidden');
+        if (sendControls) sendControls.classList.add('hidden');
+    });
+}
 
 if (helpBtn && infoModal && closeModal) {
     helpBtn.addEventListener("click", () => {
@@ -433,6 +459,16 @@ if (settingsBtn && settingsModal && closeSettingsModal && saveSettingsBtn) {
     const manualApprovalToggle = document.getElementById("manual-approval-toggle");
     const autoClearToggle = document.getElementById("auto-clear-toggle");
     const customStunInput = document.getElementById("custom-stun-input");
+    const advancedToggle = document.getElementById("advanced-settings-toggle");
+    const advancedContent = document.getElementById("advanced-settings-content");
+    const advancedArrow = document.getElementById("advanced-arrow");
+
+    if (advancedToggle && advancedContent && advancedArrow) {
+        advancedToggle.addEventListener("click", () => {
+            advancedContent.classList.toggle("hidden");
+            advancedArrow.classList.toggle("rotated");
+        });
+    }
 
     // Toggle custom input visibility
     stunSelect.addEventListener("change", () => {

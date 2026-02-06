@@ -299,9 +299,36 @@ function manejarChunk(data) {
                 state.nombreArchivoRecibido = msg.nombre;
                 state.tamañoArchivoEsperado = msg.tamaño;
                 state.tipoMimeRecibido = msg.tipoMime;
-                state.hashEsperado = msg.hash; // NEW: Capturar hash para validación
+                state.hashEsperado = msg.hash;
+                state.hashType = msg.hashType;
                 state.archivoRecibidoBuffers = [];
-                window.Cudi.showToast(`Receiving: ${state.nombreArchivoRecibido}`, "info");
+                state.bytesReceived = 0;
+                state.lastLoggedPercent = 0;
+
+                // Prompt User to Start Download (Disk or RAM)
+                if (window.Cudi.displayIncomingFileRequest) {
+                    window.Cudi.displayIncomingFileRequest(msg.nombre, msg.tamaño, async () => {
+                        // Try Native File System API
+                        if (window.showSaveFilePicker) {
+                            try {
+                                const handle = await window.showSaveFilePicker({ suggestedName: msg.nombre });
+                                state.fileHandle = handle;
+                                state.fileWritable = await handle.createWritable();
+                            } catch (e) {
+                                if (e.name === 'AbortError') return false;
+                                console.warn("File saving skipped/failed, falling back to RAM");
+                            }
+                        }
+                        // Send Ready Signal
+                        state.dataChannel.send(JSON.stringify({ type: "start_transfer" }));
+                        return true;
+                    });
+                } else {
+                    state.dataChannel.send(JSON.stringify({ type: "start_transfer" }));
+                }
+
+            } else if (msg.type === "start_transfer") {
+                if (window.Cudi.startFileStreaming) window.Cudi.startFileStreaming();
             } else if (msg.type === "chat") {
                 window.Cudi.displayChatMessage(msg.message, "received", msg.alias);
             } else if (msg.type === "profile") {

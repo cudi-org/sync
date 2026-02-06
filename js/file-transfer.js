@@ -18,6 +18,17 @@ window.Cudi.handleFileSelection = function (file) {
     }
 }
 
+// Helper for binary comparison
+function compareBuffers(buf1, buf2) {
+    if (buf1.byteLength != buf2.byteLength) return false;
+    const dv1 = new Int8Array(buf1);
+    const dv2 = new Int8Array(buf2);
+    for (let i = 0; i != buf1.byteLength; i++) {
+        if (dv1[i] != dv2[i]) return false;
+    }
+    return true;
+}
+
 window.Cudi.enviarArchivo = async function () {
     const state = window.Cudi.state;
     if (!state.archivoParaEnviar) return;
@@ -35,46 +46,49 @@ window.Cudi.enviarArchivo = async function () {
         return;
     }
 
+    // 1. Send Meta (No global hash, we will verify per chunk)
+    // Send "await_acceptance" hint so receiver knows we are waiting
     try {
         state.dataChannel.send(JSON.stringify({
             type: "meta",
             nombre: file.name,
             tamaño: file.size,
             tipoMime: file.type,
-            hash: await (async () => {
-                try {
-                    const buf = await file.arrayBuffer();
-                    const hashBuffer = await crypto.subtle.digest('SHA-256', buf);
-                    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-                } catch (e) {
-                    console.error("Hashing error:", e);
-                    return null;
-                }
-            })()
+            hash: null, // No global hash needed
+            hashType: 'chunk' // Signal to Receiver to verify every packet
         }));
+
+        window.Cudi.displayChatMessage(`Request sent: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB). Waiting for acceptance...`, "sent", "You");
+        window.Cudi.showToast("Waiting for peer to accept transfer...", "info");
+        state.isWaitingForTransferStart = true;
+
     } catch (e) {
         console.error("Error sending meta:", e);
         return;
     }
+}
+
+window.Cudi.startFileStreaming = async function () {
+    const state = window.Cudi.state;
+    const file = state.archivoParaEnviar;
+    if (!file) {
+        console.warn("No file to stream?");
+        return;
+    }
 
     let offset = 0;
+    let lastLoggedPercent = 0;
     const CHUNK_SIZE = window.Cudi.CHUNK_SIZE || 16384;
-    // Control de flujo: Límite de seguridad para evitar crash
-    const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64 KB
-    // Importante: establecer el umbral para el evento bufferedamountlow
+    const MAX_BUFFERED_AMOUNT = 64 * 1024;
     state.dataChannel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
 
-    window.Cudi.showToast(`Sending: ${file.name}...`, "info");
-    window.Cudi.displayChatMessage(`Sending file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, "sent", "You");
+    window.Cudi.showToast(`Header accepted! Sending: ${file.name}...`, "info");
 
     try {
         while (offset < file.size) {
-            // Check connection state during loop
-            if (state.dataChannel.readyState !== 'open') {
-                throw new Error("Connection lost during transfer");
-            }
+            // Check if user cancelled or connection died
+            if (state.dataChannel.readyState !== 'open') throw new Error("Connection lost");
 
-            // Si el buffer está lleno, esperamos con timeout de seguridad
             if (state.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
                 await new Promise(resolve => {
                     let resolved = false;
@@ -85,94 +99,152 @@ window.Cudi.enviarArchivo = async function () {
                         resolve();
                     };
                     state.dataChannel.addEventListener('bufferedamountlow', handler);
-
-                    // Fallback: mobile browsers might miss the event
-                    setTimeout(() => {
-                        if (!resolved) {
-                            // console.warn("BufferedAmountLow timeout - forcing resume"); 
-                            handler();
-                        }
-                    }, 100);
+                    setTimeout(() => { if (!resolved) handler(); }, 100);
                 });
             }
 
+            // 2. Read Chunk
             const slice = file.slice(offset, offset + CHUNK_SIZE);
-            const chunk = await slice.arrayBuffer();
-            state.dataChannel.send(chunk);
+            const chunkBuffer = await slice.arrayBuffer();
+
+            // 3. Compute Hash of this chunk
+            const chunkHash = await crypto.subtle.digest('SHA-256', chunkBuffer); // 32 bytes
+
+            // 4. Pack: [Hash (32B)] + [Data]
+            const packet = new Uint8Array(32 + chunkBuffer.byteLength);
+            packet.set(new Uint8Array(chunkHash), 0);
+            packet.set(new Uint8Array(chunkBuffer), 32);
+
+            // 5. Send
+            state.dataChannel.send(packet);
+
+            // Debug Log (Percentage based)
+            const percent = Math.floor(((offset + CHUNK_SIZE) / file.size) * 100);
+            if (percent > lastLoggedPercent && percent % 5 === 0) {
+                console.log(`[Sender] Progress: ${percent}% (${((offset + CHUNK_SIZE) / 1024 / 1024).toFixed(2)} MB)`);
+                lastLoggedPercent = percent;
+            }
+
             offset += CHUNK_SIZE;
+
+            // Give the browser a "breather" every 50 chunks (~800KB) to run Garbage Collector
+            if ((offset / CHUNK_SIZE) % 50 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
 
+        console.log(`[Sender] Finished. Total bytes sent: ${file.size}`);
         window.Cudi.showToast("File sent successfully!", "success");
         state.archivoParaEnviar = null;
-        const fileInput = document.getElementById("fileInput");
-        if (fileInput) fileInput.value = "";
+        state.isWaitingForTransferStart = false;
+        if (document.getElementById("fileInput")) document.getElementById("fileInput").value = "";
 
     } catch (err) {
         console.error("Error sending file:", err);
         window.Cudi.showToast("Error sending file.", "error");
+        state.isWaitingForTransferStart = false;
     }
 }
 
 window.Cudi.processBuffer = async function (data) {
     const state = window.Cudi.state;
-    state.archivoRecibidoBuffers.push(data);
-    const receivedSize = state.archivoRecibidoBuffers.reduce((acc, b) => acc + b.byteLength, 0);
 
-    if (receivedSize >= state.tamañoArchivoEsperado) {
-        const ext = state.nombreArchivoRecibido.split('.').pop().toLowerCase();
-        let mimeType = state.tipoMimeRecibido || '';
+    // Check if we need to extract and verify hash
+    let dataContent = data;
 
-        // Force correct MIME types for known extensions
-        const MIME_MAP = {
-            'mp3': 'audio/mpeg',
-            'wav': 'audio/wav',
-            'ogg': 'audio/ogg',
-            'mp4': 'video/mp4',
-            'webm': 'video/webm',
-            'png': 'image/png',
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'gif': 'image/gif',
-            'webp': 'image/webp',
-            'pdf': 'application/pdf'
-        };
-
-        if (MIME_MAP[ext]) {
-            mimeType = MIME_MAP[ext];
-        } else if (!mimeType) {
-            mimeType = 'application/octet-stream';
+    if (state.hashType === 'chunk') {
+        if (data.byteLength <= 32) {
+            console.error("Received packet too small for chunk-hash verification");
+            return; // Ignore invalid packet
         }
 
-        const blob = new Blob(state.archivoRecibidoBuffers, { type: mimeType });
+        // Extract Hash and Content
+        const receivedHash = data.slice(0, 32);
+        dataContent = data.slice(32);
 
-        // Integrity Check
-        let isVerified = false;
-        if (state.hashEsperado) {
-            try {
-                const buf = await blob.arrayBuffer();
-                const hashBuffer = await crypto.subtle.digest('SHA-256', buf);
-                const calcHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        // Verify Integrity
+        try {
+            const calculatedHash = await crypto.subtle.digest('SHA-256', dataContent);
+            if (!compareBuffers(receivedHash, calculatedHash)) {
+                console.error("CHUNK INTEGRITY FAILED");
+                window.Cudi.showToast("⚠️ Transmission Error: Chunk Corrupted. Aborting.", "error");
+                state.tamañoArchivoEsperado = 0;
 
-                if (calcHash !== state.hashEsperado) {
-                    window.Cudi.showToast("⚠️ Integrity Check FAILED!", "error");
-                    if (!confirm("Security Warning: File hash mismatch.\nThe file may be corrupted or tampered.\n\nDo you want to download it anyway?")) {
-                        state.archivoRecibidoBuffers = [];
-                        return;
-                    }
-                } else {
-                    window.Cudi.showToast("✅ Integrity Verified", "success");
-                    isVerified = true;
+                // Abort writable if exists
+                if (state.fileWritable) {
+                    await state.fileWritable.abort();
+                    state.fileWritable = null;
+                    state.fileHandle = null;
                 }
-            } catch (e) {
-                console.error("Verification error", e);
+                return;
             }
+
+        } catch (e) {
+            console.error("Verification error:", e);
+            return;
         }
+    }
 
-        state.archivoRecibidoBuffers = [];
+    // --- DIRECT TO DISK WRITING (FileSystem Access API) ---
+    if (state.fileWritable) {
+        try {
+            await state.fileWritable.write(dataContent);
+        } catch (e) {
+            console.error("Disk Write Error:", e);
+            window.Cudi.showToast("Disk write failed (Space full?)", "error");
+            state.tamañoArchivoEsperado = 0; // Stop
+            return;
+        }
+    } else {
+        // Fallback: RAM (Only if no fileWritable set)
+        state.archivoRecibidoBuffers.push(dataContent);
+    }
 
-        const url = URL.createObjectURL(blob);
+    // Optimize counter
+    if (typeof state.bytesReceived === 'undefined') state.bytesReceived = 0;
+    state.bytesReceived += dataContent.byteLength;
 
-        window.Cudi.showToast(`File received: ${state.nombreArchivoRecibido}`, "success");
-        window.Cudi.displayFileDownload(state.nombreArchivoRecibido, url, "received", "Sender", isVerified);
+    // Log Progress (Receiver)
+    if (state.tamañoArchivoEsperado > 0) {
+        const percent = Math.floor((state.bytesReceived / state.tamañoArchivoEsperado) * 100);
+        if (typeof state.lastLoggedPercent === 'undefined') state.lastLoggedPercent = 0;
+
+        if (percent > state.lastLoggedPercent && percent % 5 === 0) {
+            console.log(`[Receiver] Progress: ${percent}% (${(state.bytesReceived / 1024 / 1024).toFixed(2)} MB)`);
+            state.lastLoggedPercent = percent;
+        }
+    }
+
+    // Check completion
+    if (state.bytesReceived >= state.tamañoArchivoEsperado) {
+        window.Cudi.showToast(`✅ File Verified & Received: ${state.nombreArchivoRecibido}`, "success");
+        state.bytesReceived = 0; // Reset counter
+
+        if (state.fileWritable) {
+            // Close stream
+            await state.fileWritable.close();
+            state.fileWritable = null;
+            // Display "Open" link if possible, or just a success message
+            // Note: We cannot create a Blob URL from a closed writable handle easily without re-reading. 
+            // But we don't need to. We just show "Saved".
+            window.Cudi.displayChatMessage(`Saved to disk: ${state.nombreArchivoRecibido}`, "received", "Sender");
+        } else {
+            // RAM Fallback
+            const ext = state.nombreArchivoRecibido.split('.').pop().toLowerCase();
+            let mimeType = state.tipoMimeRecibido || 'application/octet-stream';
+
+            const MIME_MAP = {
+                'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+                'mp4': 'video/mp4', 'webm': 'video/webm',
+                'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+                'pdf': 'application/pdf'
+            };
+            if (MIME_MAP[ext]) mimeType = MIME_MAP[ext];
+
+            const blob = new Blob(state.archivoRecibidoBuffers, { type: mimeType });
+            state.archivoRecibidoBuffers = []; // Clear RAM
+
+            window.Cudi.displayFileDownload(state.nombreArchivoRecibido, URL.createObjectURL(blob), "received", "Sender", true);
+        }
     }
 }

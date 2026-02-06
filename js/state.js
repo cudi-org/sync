@@ -5,7 +5,7 @@ window.Cudi.state = {
     peer: null,
     dataChannel: null,
     salaId: null,
-    modo: null, // "send" | "receive"
+    modo: null,
     mensajePendiente: [],
     isRoomLocked: false,
     archivoParaEnviar: null,
@@ -18,7 +18,6 @@ window.Cudi.state = {
     remoteAlias: null,
 };
 
-// Initial settings load
 let loaded = { stun: "google" };
 try {
     const saved = localStorage.getItem("cudi_settings");
@@ -34,7 +33,7 @@ window.Cudi.STUN_SERVERS_MAP = {
     "mozilla": [{ urls: "stun:stun.services.mozilla.com" }],
     "twilio": [{ urls: "stun:global.stun.twilio.com:3478" }],
     "none": [],
-    "custom": [] // Will be populated dynamically if selected
+    "custom": []
 };
 
 let settingsIce;

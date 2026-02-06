@@ -21,7 +21,7 @@ window.Cudi.iniciarConexion = function () {
             room: state.salaId,
             appType: window.Cudi.appType,
             alias: state.localAlias,
-            password: state.roomPassword, // Send password (plaintext over WSS is encrypted by TLS)
+            password: state.roomPassword,
             manualApproval: window.currentSettings ? window.currentSettings.manualApproval : false
         });
 

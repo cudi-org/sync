@@ -194,3 +194,58 @@ window.Cudi.displayFileDownload = function (filename, url, type, alias, isVerifi
     messagesDisplay.appendChild(p);
     messagesDisplay.scrollTop = messagesDisplay.scrollHeight;
 }
+
+window.Cudi.displayIncomingFileRequest = function (filename, size, onAccept) {
+    const messagesDisplay = document.getElementById("messagesDisplay");
+    if (!messagesDisplay) return;
+
+    const p = document.createElement("p");
+    p.className = "received";
+
+    const container = document.createElement("div");
+    container.style.background = "rgba(0, 0, 0, 0.05)";
+    container.style.padding = "10px";
+    container.style.borderRadius = "8px";
+    container.style.borderLeft = "4px solid #5162FA";
+    container.style.maxWidth = "300px";
+
+    const title = document.createElement("div");
+    title.innerHTML = `<strong>📄 Incoming File Request</strong>`;
+    title.style.marginBottom = "5px";
+
+    const info = document.createElement("div");
+    info.textContent = `${filename} (${(size / 1024 / 1024).toFixed(2)} MB)`;
+    info.style.fontSize = "0.9rem";
+    info.style.marginBottom = "10px";
+
+    const btn = document.createElement("button");
+    btn.innerHTML = "💾 Save to Disk (Recommended)";
+    btn.style.background = "#5162FA";
+    btn.style.color = "white";
+    btn.style.border = "none";
+    btn.style.padding = "8px 16px";
+    btn.style.borderRadius = "4px";
+    btn.style.cursor = "pointer";
+    btn.style.width = "100%";
+    btn.style.fontWeight = "bold";
+
+    btn.onclick = async () => {
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Initializing...";
+        const result = await onAccept();
+        if (result) {
+            container.innerHTML = `<strong>✅ Starting Download...</strong><br><small>${filename}</small>`;
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = "💾 Save to Disk (Retry)";
+        }
+    };
+
+    container.appendChild(title);
+    container.appendChild(info);
+    container.appendChild(btn);
+    p.appendChild(container);
+
+    messagesDisplay.appendChild(p);
+    messagesDisplay.scrollTop = messagesDisplay.scrollHeight;
+};

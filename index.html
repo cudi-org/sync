@@ -21,7 +21,7 @@
       </div>
       <nav class="navbar" id="navbar">
         <a href="https://cudi-org.github.io/" target="_blank" rel="noopener noreferrer">Community</a>
-        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=breolanapp@gmail.com&su=Proyecto%20Sync" target="_blank"
+        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=breolanapp@gmail.com&su=Sync%20Project" target="_blank"
           rel="noopener noreferrer">Contact</a>
       </nav>
       <button class="menu-toggle" id="menu-toggle" aria-label="Open menu">
@@ -55,10 +55,10 @@
     <div id="menu">
       <p>What do you want to do?</p>
       <div class="buttons">
-        <button id="btnCreate">Send File</button>
-        <button id="btnShowJoin">Receive File</button>
+        <button id="tabSend" class="active-tab">Send File</button>
+        <button id="tabReceive" class="inactive-tab">Receive File</button>
       </div>
-      <div class="entry-controls">
+      <div id="send-controls" class="entry-controls">
         <div class="input-group">
           <input type="text" id="aliasInput" placeholder="Your Alias (Name)" class="w-full text-center"
             autocomplete="off" maxlength="20">
@@ -67,12 +67,15 @@
           autocomplete="off" maxlength="20">
         <input type="password" id="roomPasswordInput" placeholder="Password (Optional)" class="input-code mt-5"
           autocomplete="off" maxlength="20">
+        <div class="text-center mt-5">
+          <button id="btnCreate" class="btn-primary-small">Start Room</button>
+        </div>
       </div>
-      <div id="recepcion" class="w-full hidden">
+      <div id="recepcion" class="entry-controls w-full hidden">
         <input type="text" id="codigoSala" placeholder="Enter Room Code" autocomplete="off" maxlength="20"
-          class="text-center" />
-        <input type="password" id="joinPasswordInput" placeholder="Room Password (if needed)"
-          class="mt-5 w-full text-center" autocomplete="off" maxlength="20" />
+          class="input-code" />
+        <input type="password" id="joinPasswordInput" placeholder="Room Password (if needed)" class="input-code mt-5"
+          autocomplete="off" maxlength="20" />
         <button id="unirseBtn" class="mt-5">Join</button>
       </div>
     </div>
@@ -135,7 +138,7 @@
         </div>
       </div>
 
-      <div class="drop-area" id="dropZone" tabindex="0" role="button" aria-label="Zone to upload files">
+      <div id="dropZone" class="drop-area" tabindex="0" role="button" aria-label="Zone to upload files">
         <p>Drag & Drop files here or click to select</p>
         <input type="file" id="fileInput" hidden />
       </div>
@@ -192,7 +195,7 @@
 
   <footer>
     <p>
-      &copy; 2025 CUDI - Comunidad de Usuarios para la Defensa Informática | <a href="#" id="open-legal-modal"
+      &copy; 2026 CUDI - Comunidad de Usuarios para la Defensa Informática | <a href="#" id="open-legal-modal"
         class="text-inherit">Legal Notice</a>
     </p>
   </footer>
@@ -241,34 +244,7 @@
       <span id="close-settings-modal" class="close">&times;</span>
       <h3>Settings</h3>
 
-      <div class="settings-group">
-        <label for="stun-select">STUN Server:</label>
-        <select id="stun-select">
-          <option value="google">Google (Default) - Max Speed</option>
-          <option value="cloudflare">Cloudflare - Speed & Privacy</option>
-          <option value="mozilla">Mozilla - Privacy Focused</option>
-          <option value="twilio">Twilio - Reliability</option>
-          <option value="none">None - Local Network Only</option>
-          <option value="custom">Custom (Manual)</option>
-        </select>
-        <input type="text" id="custom-stun-input" placeholder="stun:your.server.com:3478" class="mt-5 hidden"
-          autocomplete="off" />
-        <p class="setting-desc">Server used to establish the P2P connection (IP discovery).</p>
-      </div>
-
-      <div class="settings-group">
-        <label for="filesize-select">Max File Size Limit:</label>
-        <select id="filesize-select">
-          <option value="0">No Limit</option>
-          <option value="10">10 MB</option>
-          <option value="50">50 MB</option>
-          <option value="100">100 MB</option>
-          <option value="500">500 MB</option>
-          <option value="1024">1 GB</option>
-        </select>
-        <p class="setting-desc">Warn or block files larger than this limit.</p>
-      </div>
-
+      <!-- Primary Settings -->
       <div class="settings-group" id="manual-approval-group">
         <label>Manual Approval:</label>
         <label class="switch">
@@ -278,8 +254,6 @@
         <p class="setting-desc">Require approval for each person joining.</p>
       </div>
 
-
-
       <div class="settings-group">
         <label>Auto-Clear Storage:</label>
         <div class="flex-between-center">
@@ -288,6 +262,47 @@
             <input type="checkbox" id="auto-clear-toggle" checked>
             <span class="slider round"></span>
           </label>
+        </div>
+      </div>
+
+      <!-- Advanced Toggle -->
+      <!-- Advanced Toggle Header -->
+      <div id="advanced-settings-toggle" class="settings-section-header cursor-pointer">
+        <span>Advanced Settings</span>
+        <svg id="advanced-arrow" class="arrow-icon" viewBox="0 0 24 24" width="20" height="20" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M6 9l6 6 6-6"></path>
+        </svg>
+      </div>
+
+      <!-- Advanced Settings Section -->
+      <div id="advanced-settings-content" class="hidden">
+        <div class="settings-group">
+          <label for="stun-select">STUN Server:</label>
+          <select id="stun-select">
+            <option value="google">Google (Default) - Max Speed</option>
+            <option value="cloudflare">Cloudflare - Speed & Privacy</option>
+            <option value="mozilla">Mozilla - Privacy Focused</option>
+            <option value="twilio">Twilio - Reliability</option>
+            <option value="none">None - Local Network Only</option>
+            <option value="custom">Custom (Manual)</option>
+          </select>
+          <input type="text" id="custom-stun-input" placeholder="stun:your.server.com:3478" class="mt-5 hidden"
+            autocomplete="off" />
+          <p class="setting-desc">Server used to establish the P2P connection (IP discovery).</p>
+        </div>
+
+        <div class="settings-group">
+          <label for="filesize-select">Max File Size Limit:</label>
+          <select id="filesize-select">
+            <option value="0">No Limit</option>
+            <option value="10">10 MB</option>
+            <option value="50">50 MB</option>
+            <option value="100">100 MB</option>
+            <option value="500">500 MB</option>
+            <option value="1024">1 GB</option>
+          </select>
+          <p class="setting-desc">Warn or block files larger than this limit.</p>
         </div>
       </div>
 
