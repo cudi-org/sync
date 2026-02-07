@@ -1027,6 +1027,53 @@ input:checked+.slider:before {
   display: flex;
 }
 
+/* Split View Mode */
+.video-wrapper.split-view {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.video-wrapper.split-view .video-remote {
+  width: 50%;
+  height: 100%;
+  object-fit: contain;
+  order: 1;
+}
+
+.video-wrapper.split-view .video-local {
+  position: relative;
+  width: 50%;
+  height: 100%;
+  bottom: auto;
+  right: auto;
+  aspect-ratio: auto;
+  border: none;
+  box-shadow: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  object-fit: contain;
+  order: 2;
+  z-index: 1;
+}
+
+/* Watermark */
+.watermark {
+  position: absolute;
+  bottom: 15px;
+  left: 15px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 20;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
 .video-controls {
   position: absolute;
   bottom: 20px;

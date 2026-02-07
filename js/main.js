@@ -597,3 +597,32 @@ if (btnFullscreen) {
         }
     });
 }
+
+// Split View Logic
+const localVideo = document.getElementById("localVideo");
+const localVideoPlaceholder = document.getElementById("localVideoPlaceholder");
+const videoWrapper = document.querySelector(".video-wrapper");
+const videoWatermark = document.getElementById("videoWatermark");
+
+function toggleSplitView() {
+    if (videoWrapper) {
+        videoWrapper.classList.toggle("split-view");
+        const isSplit = videoWrapper.classList.contains("split-view");
+
+        if (videoWatermark) {
+            if (isSplit) {
+                videoWatermark.classList.remove("hidden");
+            } else {
+                videoWatermark.classList.add("hidden");
+            }
+        }
+    }
+}
+
+if (localVideo) {
+    localVideo.addEventListener("click", toggleSplitView);
+}
+
+if (localVideoPlaceholder) {
+    localVideoPlaceholder.addEventListener("click", toggleSplitView);
+}
