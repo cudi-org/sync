@@ -28,6 +28,13 @@ window.Cudi.crearPeer = function (isOffer) {
 
         state.peer.onicecandidate = (event) => {
             if (event.candidate) {
+                // Log minimalista para saber qué opciones está encontrando el navegador
+                const parts = event.candidate.candidate.split(' ');
+                // Standard candidate format: Foundation Component Protocol Priority IP Port Typ Type ...
+                // Type is usually the 8th element (index 7)
+                const tipo = parts.length > 7 ? parts[7] : 'unknown';
+                console.log(`[CUDI-ICE] Candidato encontrado: ${tipo}`);
+
                 window.Cudi.enviarSocket({
                     tipo: "candidato",
                     candidato: event.candidate,
