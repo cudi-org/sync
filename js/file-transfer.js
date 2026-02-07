@@ -78,11 +78,13 @@ window.Cudi.startFileStreaming = async function () {
 
     let offset = 0;
     let lastLoggedPercent = 0;
-    const CHUNK_SIZE = 64 * 1024; // Subimos de 16KB a 64KB
-    const MAX_BUFFERED_AMOUNT = 64 * 1024;
+    const CHUNK_SIZE = 128 * 1024; // Subimos a 128KB
+    // Buffer threshold: 4MB as requested by user
+    const MAX_BUFFERED_AMOUNT = 4 * 1024 * 1024;
     state.dataChannel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
 
     window.Cudi.showToast(`Header accepted! Sending: ${file.name}...`, "info");
+    console.log("[CUDI] Iniciando transferencia optimizada...");
 
     let bytesEnUltimoSegundo = 0;
     const monitorVelocidad = setInterval(() => {
@@ -96,34 +98,39 @@ window.Cudi.startFileStreaming = async function () {
     }, 1000);
 
     try {
+        let chunksProcesados = 0;
         while (offset < file.size) {
             // Check if user cancelled or connection died
             if (state.dataChannel.readyState !== 'open') throw new Error("Connection lost");
 
-            // Log de Salud de la Red (Backpressure)
-            if (state.dataChannel.bufferedAmount > 1024 * 1024) {
-                console.warn(`[CUDI] Buffer saturado: ${state.dataChannel.bufferedAmount} bytes. Pausando envío...`);
+            // --- LOGS DE DIAGNÓSTICO DETALLADO ---
+            if (chunksProcesados % 50 === 0) {
+                const bufferActual = state.dataChannel.bufferedAmount;
+                const ratioSaturacion = ((bufferActual / (4 * 1024 * 1024)) * 100).toFixed(1);
+
+                console.log(`[DIAGNÓSTICO] Buffer: ${(bufferActual / 1024).toFixed(0)}KB (${ratioSaturacion}%) | Offset: ${(offset / 1024 / 1024).toFixed(1)}MB`);
+
+                if (bufferActual === 0) {
+                    console.warn("[ALERTA] El buffer está vacío. El código va más lento que la red (Tubería vacía).");
+                } else if (ratioSaturacion > 80) {
+                    console.info("[ALERTA] El buffer está lleno. La red va más lenta que el código (Cuello de botella en internet).");
+                }
             }
 
+            // CONTROL DE FLUJO AGRESIVO:
+            // Solo frenamos si el buffer supera los 4MB.
+            // Usamos un bucle de espera (polling) en lugar de eventos para mayor reactividad en alta velocidad.
             if (state.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
-                await new Promise(resolve => {
-                    let resolved = false;
-                    const handler = () => {
-                        if (resolved) return;
-                        resolved = true;
-                        state.dataChannel.removeEventListener('bufferedamountlow', handler);
-                        resolve();
-                    };
-                    state.dataChannel.addEventListener('bufferedamountlow', handler);
-                    setTimeout(() => { if (!resolved) handler(); }, 100);
-                });
+                // Esperar 10ms y re-evaluar (Loop 'continue' implícito al no avanzar offset)
+                await new Promise(resolve => setTimeout(resolve, 10));
+                continue;
             }
 
             // 2. Read Chunk
             const slice = file.slice(offset, offset + CHUNK_SIZE);
             const chunkBuffer = await slice.arrayBuffer();
 
-            // 3. Compute Hash of this chunk
+            // 3. Compute Hash of this chunk (Required by Receiver protocol)
             const chunkHash = await crypto.subtle.digest('SHA-256', chunkBuffer); // 32 bytes
 
             // 4. Pack: [Hash (32B)] + [Data]
@@ -136,22 +143,23 @@ window.Cudi.startFileStreaming = async function () {
 
             bytesEnUltimoSegundo += packet.byteLength;
 
-            // Debug Log (Percentage based)
+            // Debug Log (Percentage based) - Less frequent
             const percent = Math.floor(((offset + CHUNK_SIZE) / file.size) * 100);
             if (percent > lastLoggedPercent && percent % 5 === 0) {
-                console.log(`[Sender] Progress: ${percent}% (${((offset + CHUNK_SIZE) / 1024 / 1024).toFixed(2)} MB)`);
                 lastLoggedPercent = percent;
             }
 
             offset += CHUNK_SIZE;
+            chunksProcesados++;
 
-            // Give the browser a "breather" every 150 chunks to run Garbage Collector and avoid blocking UI
-            if ((offset / CHUNK_SIZE) % 150 === 0) {
+            // Respiro de RAM mucho más espaciado (cada ~50MB procesados)
+            if ((offset / CHUNK_SIZE) % 400 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
 
         console.log(`[Sender] Finished. Total bytes sent: ${file.size}`);
+        console.log("[CUDI] Envío finalizado con éxito.");
         window.Cudi.showToast("File sent successfully!", "success");
         state.archivoParaEnviar = null;
         state.isWaitingForTransferStart = false;
