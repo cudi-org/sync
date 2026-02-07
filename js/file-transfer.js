@@ -18,6 +18,10 @@ window.Cudi.handleFileSelection = function (file) {
     }
 }
 
+// Global monitoring variables
+let lastBufferedAmount = 0;
+let stallCount = 0;
+
 // Helper for binary comparison
 function compareBuffers(buf1, buf2) {
     if (buf1.byteLength != buf2.byteLength) return false;
@@ -78,9 +82,9 @@ window.Cudi.startFileStreaming = async function () {
 
     let offset = 0;
     let lastLoggedPercent = 0;
-    const CHUNK_SIZE = 128 * 1024; // Subimos a 128KB
-    // Buffer threshold: 4MB as requested by user
-    const MAX_BUFFERED_AMOUNT = 4 * 1024 * 1024;
+    const CHUNK_SIZE = 32 * 1024; // Bájalo a 32KB
+    // Buffer threshold: 1MB as requested by user
+    const MAX_BUFFERED_AMOUNT = 1 * 1024 * 1024;
     state.dataChannel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
 
     window.Cudi.showToast(`Header accepted! Sending: ${file.name}...`, "info");
@@ -105,8 +109,24 @@ window.Cudi.startFileStreaming = async function () {
 
             // --- LOGS DE DIAGNÓSTICO DETALLADO ---
             if (chunksProcesados % 50 === 0) {
-                const bufferActual = state.dataChannel.bufferedAmount;
-                const ratioSaturacion = ((bufferActual / (4 * 1024 * 1024)) * 100).toFixed(1);
+                const currentBufferedAmount = state.dataChannel.bufferedAmount;
+                const drainageRate = lastBufferedAmount - currentBufferedAmount;
+                lastBufferedAmount = currentBufferedAmount;
+
+                if (currentBufferedAmount > 0 && drainageRate <= 0) {
+                    stallCount++;
+                    if (stallCount > 5) {
+                        console.error("[CRÍTICO] La red no está drenando datos. Posible bloqueo de firewall o saturación de MTU.");
+                    }
+                } else {
+                    stallCount = 0;
+                    if (drainageRate > 0) {
+                        console.log(`[RED] Tasa de drenaje: ${(drainageRate / 1024).toFixed(1)} KB/ciclo`);
+                    }
+                }
+
+                const bufferActual = currentBufferedAmount;
+                const ratioSaturacion = ((bufferActual / (1 * 1024 * 1024)) * 100).toFixed(1);
 
                 console.log(`[DIAGNÓSTICO] Buffer: ${(bufferActual / 1024).toFixed(0)}KB (${ratioSaturacion}%) | Offset: ${(offset / 1024 / 1024).toFixed(1)}MB`);
 
