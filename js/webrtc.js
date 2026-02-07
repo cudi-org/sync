@@ -36,6 +36,22 @@ window.Cudi.crearPeer = function (isOffer) {
             }
         };
 
+        state.peer.oniceconnectionstatechange = () => {
+            console.log(`[CUDI] Estado ICE: ${state.peer.iceConnectionState}`);
+
+            if (state.peer.iceConnectionState === 'connected') {
+                state.peer.getStats().then(stats => {
+                    stats.forEach(report => {
+                        if (report.type === 'remote-candidate') {
+                            console.log(`[CUDI] Conectado vía: ${report.candidateType}`);
+                            // Si dice 'relay', el problema es el servidor TURN.
+                            // Si dice 'srflx' o 'host', la conexión es directa y el fallo es el buffer.
+                        }
+                    });
+                });
+            }
+        };
+
         state.peer.onconnectionstatechange = () => {
             logger(`WebRTC Connection State: ${state.peer.connectionState}`);
             if (state.peer.connectionState === "disconnected" || state.peer.connectionState === "failed") {

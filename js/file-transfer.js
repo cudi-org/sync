@@ -84,10 +84,26 @@ window.Cudi.startFileStreaming = async function () {
 
     window.Cudi.showToast(`Header accepted! Sending: ${file.name}...`, "info");
 
+    let bytesEnUltimoSegundo = 0;
+    const monitorVelocidad = setInterval(() => {
+        if (!state.isWaitingForTransferStart || offset >= file.size) {
+            clearInterval(monitorVelocidad);
+            return;
+        }
+        const mbPorSegundo = (bytesEnUltimoSegundo / (1024 * 1024)).toFixed(2);
+        console.log(`[CUDI] Velocidad actual: ${mbPorSegundo} MB/s | Progreso: ${((offset / file.size) * 100).toFixed(1)}%`);
+        bytesEnUltimoSegundo = 0;
+    }, 1000);
+
     try {
         while (offset < file.size) {
             // Check if user cancelled or connection died
             if (state.dataChannel.readyState !== 'open') throw new Error("Connection lost");
+
+            // Log de Salud de la Red (Backpressure)
+            if (state.dataChannel.bufferedAmount > 1024 * 1024) {
+                console.warn(`[CUDI] Buffer saturado: ${state.dataChannel.bufferedAmount} bytes. Pausando envío...`);
+            }
 
             if (state.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
                 await new Promise(resolve => {
@@ -118,6 +134,8 @@ window.Cudi.startFileStreaming = async function () {
             // 5. Send
             state.dataChannel.send(packet);
 
+            bytesEnUltimoSegundo += packet.byteLength;
+
             // Debug Log (Percentage based)
             const percent = Math.floor(((offset + CHUNK_SIZE) / file.size) * 100);
             if (percent > lastLoggedPercent && percent % 5 === 0) {
@@ -140,6 +158,7 @@ window.Cudi.startFileStreaming = async function () {
         if (document.getElementById("fileInput")) document.getElementById("fileInput").value = "";
 
     } catch (err) {
+        clearInterval(monitorVelocidad);
         console.error("Error sending file:", err);
         window.Cudi.showToast("Error sending file.", "error");
         state.isWaitingForTransferStart = false;
