@@ -78,7 +78,7 @@ window.Cudi.startFileStreaming = async function () {
 
     let offset = 0;
     let lastLoggedPercent = 0;
-    const CHUNK_SIZE = window.Cudi.CHUNK_SIZE || 16384;
+    const CHUNK_SIZE = 64 * 1024; // Subimos de 16KB a 64KB
     const MAX_BUFFERED_AMOUNT = 64 * 1024;
     state.dataChannel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT / 2;
 
@@ -127,8 +127,8 @@ window.Cudi.startFileStreaming = async function () {
 
             offset += CHUNK_SIZE;
 
-            // Give the browser a "breather" every 50 chunks (~800KB) to run Garbage Collector
-            if ((offset / CHUNK_SIZE) % 50 === 0) {
+            // Give the browser a "breather" every 150 chunks to run Garbage Collector and avoid blocking UI
+            if ((offset / CHUNK_SIZE) % 150 === 0) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
