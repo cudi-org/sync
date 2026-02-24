@@ -18,7 +18,10 @@ window.Cudi.crearPeer = function (isOffer) {
         // Reset peer alias logic
         state.remoteAlias = null;
         const mon = document.getElementById("connection-monitor");
-        if (mon) mon.textContent = "Initializing...";
+        if (mon) {
+            mon.textContent = "Initializing...";
+            mon.classList.add("active");
+        }
 
         // Dynamic load of current STUN settings
         const currentStun = window.currentSettings?.stun || "google";
